@@ -17,7 +17,7 @@ class Manager():
 
         run = True
         frame_n = 0
-        while len(self._games) > 0:
+        while len(self._games) > 0 and run:
             for i, game in enumerate(self._games):
                 if not game.is_alive():
                     self._games.remove(game)
