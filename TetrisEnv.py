@@ -1,6 +1,8 @@
 import pygame
 import random
 
+from pathlib import Path
+
 # GLOBALS VARS
 s_width = 800
 s_height = 700
@@ -157,32 +159,32 @@ def get_shape():
     return Piece(5, 0, random.choice(shapes))
 
 def clear_rows(grid, locked, shape):
-    inc = 0
+    shape.sort(key=lambda x: (x[1], x[0]))
+
+    x_gap = -1
+    y_values = set()
+
     for x, y in shape:
         row = grid[y]
         if (0, 0, 0) not in row:
-            
+            y_values.add(y)
+            if x_gap is -1:
+                x_gap = x
+    
+    to_remove = []
+    for x, y in locked.keys():
+        if y in y_values:
+            to_remove.append((x, y))
+    
+    for key in to_remove:
+        del locked[key]
+    
+    for clear_y in y_values:
+        for x, y in sorted(list(locked), key=lambda x: x[1])[::-1]:
+            if y < clear_y:
+                locked[(x, y + 1)] = locked.pop((x, y))
 
-
-    for i in range(len(grid)-1, -1, -1):
-        row = grid[i]
-        if (0,0,0) not in row:
-            inc += 1
-            ind = i
-            for j in range(len(row)):
-                try:
-                    del locked[(j,i)]
-                except:
-                    continue
-
-    if inc > 0:
-        for key in sorted(list(locked), key=lambda x: x[1])[::-1]:
-            x, y = key
-            if y < ind:
-                newKey = (x, y + inc)
-                locked[newKey] = locked.pop(key)
-
-    return inc
+    return len(y_values), x_gap
 
 def check_lost(positions):
     for pos in positions:
@@ -254,7 +256,7 @@ class Piece(object):
 
 
 class Game(object):
-    def __init__(self, id, seed):
+    def __init__(self, id, seed, game_size, init_screen=True):
         random.seed(seed)
         self._seed = seed
 
@@ -262,13 +264,18 @@ class Game(object):
         self._id = id
         self._score = 0
         self._action_queue = []
-        self._screen = pygame.Surface((800, 800), 32)
+        self._game_size = game_size
+
+        if init_screen:
+            self._screen = pygame.Surface((800, 800), 32)
 
         # Setup game space
         self._clock = pygame.time.Clock()
         self._alive = True
         self._next_piece = None
         self._held_piece = None
+
+        self._target = 1 if id is 0 else 0
         self._send_lines = []
         self._junk_lines_queue = []
 
@@ -298,12 +305,17 @@ class Game(object):
         return self._grid, self._next_piece, self._held_piece
     
     def get_attack_data(self):
-        result = self._send_lines
+        lines = self._send_lines
         self._send_lines = []
-        return result
+        return lines, self._target
     
     def set_junk_lines(self, lines):
-        self._junk_lines_queue.extend([lines])
+        if len(lines) > 0:
+            if len(self._junk_lines_queue) < 1:
+                self._junk_lines_queue.append([])
+                self._junk_lines_queue.append([])
+                self._junk_lines_queue.append([])
+            self._junk_lines_queue.append(lines)
     
     def next_piece(self):
         self._current_piece = self._next_piece
@@ -344,35 +356,41 @@ class Game(object):
                 self._current_piece.y -= 1
                 self._change_piece = True
         
-        # Handle actions
-        for action in self._action_queue:
+        if len(self._action_queue) > 0:
+            action = self._action_queue[0]
             # Move left
             if action == 0:
                 self._current_piece.x -= 1
                 if not(valid_space(self._current_piece, self._grid)):
                     self._current_piece.x += 1
             # Move right
-            if action == 1:
+            elif action == 1:
                 self._current_piece.x += 1
                 if not(valid_space(self._current_piece, self._grid)):
                     self._current_piece.x -= 1
             # Move down
-            if action == 2:
+            elif action == 2:
                 self._current_piece.y += 1
                 if not(valid_space(self._current_piece, self._grid)):
                     self._current_piece.y -= 1
+            # Fast drop
+            elif action == 3:
+                while valid_space(self._current_piece, self._grid):
+                    self._current_piece.y += 1
+                    self._change_piece = True
+                self._current_piece.y -= 1
             # Rotate left
-            if action == 3:
+            elif action == 4:
                 self._current_piece.rotation += 1
                 if not(valid_space(self._current_piece, self._grid)):
                     self._current_piece.rotation -= 1
             # Rotate right
-            if action == 4:
+            elif action == 5:
                 self._current_piece.rotation -= 1
                 if not(valid_space(self._current_piece, self._grid)):
                     self._current_piece.rotation += 1
             # Hold
-            if action == 5 and self._can_hold:
+            elif action == 6 and self._can_hold:
                 new_held_piece = self._current_piece
                 if self._held_piece:
                     self._current_piece = self._held_piece
@@ -393,28 +411,38 @@ class Game(object):
         
         # Current piece has hit bottom
         if self._change_piece:
-            clear_rows(self._grid, self._locked_positions, shape_pos)
-
             # Add piece to locked pieces
             for pos in shape_pos:
                 # TODO: Easy fix
                 p = (pos[0], pos[1])
                 self._locked_positions[p] = self._current_piece.color
+            nl, xg = clear_rows(self._grid, self._locked_positions, shape_pos)
+            self._send_lines = [xg] * nl
+
+            # Remove from junkline queue
+            for i in range(nl):
+                for j, group in enumerate(self._junk_lines_queue):
+                    for line in group:
+                        self._junk_lines_queue[j].remove(line)
+                        if len (self._junk_lines_queue[j]) < 1:
+                            del self._junk_lines_queue[j]
+                        i += 1
 
             # Add junk lines to grid
-            new_locked_pos = {}
-            junk_lines = self._junk_lines_queue[0]
-            n_lines = len(junk_lines)
+            if len(self._junk_lines_queue) > 0:
+                new_locked_pos = {}
+                junk_lines = self._junk_lines_queue[0]
+                n_lines = len(junk_lines)
 
-            for x, y in self._locked_positions.keys():
-                new_locked_pos[(x, y-n_lines)] = self._locked_positions[(x, y)]
+                for x, y in self._locked_positions.keys():
+                    new_locked_pos[(x, y-n_lines)] = self._locked_positions[(x, y)]
 
-            for i, line in enumerate(junk_lines):
-                for x in range(10):
-                    if x is not line:
-                        new_locked_pos[(x, 20-(i + 1))] = (255, 255, 255)
-            self._locked_positions = new_locked_pos
-            self._junk_lines_queue.remove(junk_lines)
+                for i, line in enumerate(junk_lines):
+                    for x in range(10):
+                        if x is not line:
+                            new_locked_pos[(x, 20-(i + 1))] = (255, 255, 255)
+                self._locked_positions = new_locked_pos
+                self._junk_lines_queue.remove(junk_lines)
 
             # Update game states
             self._change_piece = False
@@ -424,3 +452,51 @@ class Game(object):
         if check_lost(self._locked_positions):
             self._alive = False
         self._frame += 1
+
+class StandaloneWrapper(Game):
+    def __init__(self, id, seed, game_size, debug=False):
+        super(StandaloneWrapper, self).__init__(id, seed, game_size, init_screen=False)
+        self._screen = pygame.display.set_mode((800, 800))
+        self._debug = debug
+        self._directory = 'debug/game/{}'.format(id)
+
+        if debug:
+            Path(self._directory).mkdir(parents=True, exist_ok=True)
+    
+    def run(self):
+        frame_n = 0
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.display.quit()
+                    break
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_a:
+                        self.step(0)
+                    if event.key == pygame.K_d:
+                        self.step(1)
+                    if event.key == pygame.K_s:
+                        self.step(2)
+                    if event.key == pygame.K_w:
+                        self.step(3)
+                    if event.key == pygame.K_q:
+                        self.step(4)
+                    if event.key == pygame.K_e:
+                        self.step(5)
+                    if event.key == pygame.K_SPACE:
+                        self.step(6)
+            
+            self.render()
+            self.tick()
+
+            if not self.is_alive():
+                break
+
+            if self._debug:
+                im_path = self._directory + '/' + str(frame_n) + '.jpg'
+                pygame.image.save(self._screen, im_path)
+            frame_n += 1
+
+if __name__ == '__main__':
+    game = StandaloneWrapper(0, random.random(), debug=False)
+    game.run()
