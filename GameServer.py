@@ -1,6 +1,7 @@
 import random
 import socket
 import pickle
+import traceback
 from threading import Thread
 
 GAME_SIZE = 2
@@ -19,6 +20,7 @@ def handle_client(connection, address, client_id):
             attack_data = connection.recv(2048)
 
             if attack_data:
+                print(attack_data)
                 attack_data = pickle.loads(attack_data)
                 target = clients[attack_data['target']]
                 target.send(pickle.dumps(attack_data))
@@ -32,7 +34,7 @@ def handle_client(connection, address, client_id):
 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-server_address = ('localhost', 9008)
+server_address = ('192.168.1.25', 9009)
 print('Starting server on {}:{}'.format(*server_address))
 server.bind(server_address)
 
@@ -41,13 +43,20 @@ server.listen(2)
 while True:
     connection, client_address = server.accept()
     print('Client connected')
-    clients.append(connection)
 
-    client_id = len(clients)
-    thread = Thread(target=handle_client(connection, client_address, client_id))
-    thread.start()
+    try:
+        clients.append(connection)
 
-    if len(clients) > 0:
-        for client in clients:
-            client.send('START')
+        client_id = len(clients)
+        thread = Thread(target=handle_client, args=(connection, client_address, client_id))
+        thread.start()
+
+        if len(clients) == 2:
+            print('Starting Game')
+            for client in clients:
+                client.send(b'START')
+    except:
+        print('failed')
+        traceback.print_exc()
+        continue
 server.close()
