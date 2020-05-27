@@ -18,24 +18,26 @@ game = StandaloneWrapper(**game_data)
 while not response == b'START':
     response = client.recv(2048)
 
-def connection():
-    client.setblocking(False)
-
+def in_connection():
     while True:
-        response = None
-        lines, target = game.get_attack_data()
-        print(target, lines)
-        if len(lines) > 0:
-            client.send(pickle.dumps({ 'target': target, 'lines': lines }))
-
         response = client.recv(2048)
         if response is not None:
             response = pickle.loads(response)
             game.set_junk_lines(response['lines'])
 
+
+def out_connection():
+    while True:
+        lines, target = game.get_attack_data()
+        if len(lines) > 0:
+            client.send(pickle.dumps({ 'target': target, 'lines': lines }))
+
 print('Starting Game')
-thread = Thread(target=connection)
-thread.start()
+in_thread = Thread(target=in_connection)
+in_thread.start()
+
+out_thread = Thread(target=out_connection)
+out_thread.start()
 game.run()
 
 client.close()
