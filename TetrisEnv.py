@@ -1,17 +1,16 @@
 import pygame
 import random
+import os
 
-from pathlib import Path
+SCREEN_WIDTH = 650
+SCREEN_HEIGHT = 600
 
-# GLOBALS VARS
-s_width = 800
-s_height = 700
-play_width = 300  # meaning 300 // 10 = 30 width per block
-play_height = 600  # meaning 600 // 20 = 30 height per block
-block_size = 30
+PLAY_WIDTH = 300
+PLAY_HEIGHT = 600
+BLOCK_SIZE = 30
 
-top_left_x = (s_width - play_width) // 2
-top_left_y = s_height - play_height
+TL_X = (SCREEN_WIDTH - PLAY_WIDTH) // 2
+TL_y = SCREEN_HEIGHT - PLAY_HEIGHT
 
 # SHAPE FORMATS
 S = [['.....',
@@ -120,19 +119,24 @@ shapes = [S, Z, I, O, J, L, T]
 shape_colors = [(0, 255, 0), (255, 0, 0), (0, 255, 255), (255, 255, 0), (0, 0, 255), (255, 165, 0), (128, 0, 128)]
 
 def create_grid(locked_pos={}):
+    '''Create array grid given which positions are locked'''
+
     grid = [[(0,0,0) for _ in range(10)] for _ in range(20)]
 
     for i in range(len(grid)):
         for j in range(len(grid[i])):
             if (j, i) in locked_pos:
+            # Set locked positions
                 grid[i][j] = locked_pos[(j,i)]
     return grid
 
 def convert_shape_format(shape):
-    positions = []
-    format = shape.shape[shape.rotation % len(shape.shape)]
+    '''Convert shape array to grid positions (x,y)'''
 
-    for i, line in enumerate(format):
+    positions = []
+    s_format = shape.shape[shape.rotation % len(shape.shape)]
+
+    for i, line in enumerate(s_format):
         row = list(line)
         for j, column in enumerate(row):
             if column == '0':
@@ -144,6 +148,8 @@ def convert_shape_format(shape):
     return positions
 
 def valid_space(shape, grid):
+    '''Check if shape is valid in grid'''
+
     accepted_pos = [[(j, i) for j in range(10) if grid[i][j] == (0,0,0)] for i in range(20)]
     accepted_pos = [j for sub in accepted_pos for j in sub]
 
@@ -156,9 +162,13 @@ def valid_space(shape, grid):
     return True
 
 def get_shape():
+    '''Get random piece'''
+
     return Piece(5, 0, random.choice(shapes))
 
 def clear_rows(grid, locked, shape):
+    '''Clear rows given grid, locked positions and fallen piece'''
+
     shape.sort(key=lambda x: (x[1], x[0]))
 
     x_gap = -1
@@ -187,64 +197,73 @@ def clear_rows(grid, locked, shape):
     return len(y_values), x_gap
 
 def check_lost(positions):
-    for pos in positions:
-        x, y = pos
+    '''Check if player lost'''
+
+    for _, y in positions:
         if y < 1:
             return True
-
     return False
 
 def draw_next_shape(shape, surface):
-    sx = top_left_x + play_width + 50
-    sy = top_left_y + play_height/2 - 100
+    ''''Draw the next shape in queue'''
+
+    sx = TL_X + PLAY_WIDTH + 10
+    sy = TL_y + PLAY_HEIGHT/2 - 100
     format = shape.shape[shape.rotation % len(shape.shape)]
 
     for i, line in enumerate(format):
         row = list(line)
         for j, column in enumerate(row):
             if column == '0':
-                pygame.draw.rect(surface, shape.color, (sx + j*block_size, sy + i*block_size, block_size, block_size), 0)
+                pygame.draw.rect(surface, shape.color, (sx + j*BLOCK_SIZE, sy + i*BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE), 0)
 
 def draw_held_piece(shape, surface):
-    sx = top_left_x - 200
-    sy = top_left_y + play_height/2 - 100
+    '''Draw the held piece'''
+
+    sx = TL_X - 160
+    sy = TL_y + PLAY_HEIGHT/2 - 100
     format = shape.shape[shape.rotation % len(shape.shape)]
 
     for i, line in enumerate(format):
         row = list(line)
         for j, column in enumerate(row):
             if column == '0':
-                pygame.draw.rect(surface, shape.color, (sx + j*block_size, sy + i*block_size, block_size, block_size), 0)
+                pygame.draw.rect(surface, shape.color, (sx + j*BLOCK_SIZE, sy + i*BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE), 0)
 
-def draw_chunk_line_queue(queue, surface):
-    x = top_left_x - (5 + block_size)
-    y = top_left_y + (play_height - block_size)
+def draw_junk_line_queue(queue, surface):
+    '''Draw the junk line queue next to the playing grid'''
 
-    for i, lines in enumerate(queue):
+    x = TL_X - (5 + BLOCK_SIZE)
+    y = TL_y + (PLAY_HEIGHT - BLOCK_SIZE)
+
+    for i, group in enumerate(queue):
+        time = group['time']
+        lines = group['lines']
+
         color = (128, 128, 128)
         if i is 0:
-            color = (255, 0, 0)
-        elif i is 1:
             color = (255, 165, 0)
+            if time < 2000:
+                color = (255, 0, 0)
 
         for line in lines:
-            pygame.draw.rect(surface, color, (x, y, block_size, block_size), 0)
-            y -= 5 + block_size
+            pygame.draw.rect(surface, color, (x, y, BLOCK_SIZE, BLOCK_SIZE), 0)
+            y -= 5 + BLOCK_SIZE
 
 def draw_window(grid, surface):
     surface.fill((0, 0, 0))
 
-    sx = top_left_x + play_width + 50
-    sy = top_left_y + play_height/2 - 100
+    sx = TL_X + PLAY_WIDTH + 50
+    sy = TL_y + PLAY_HEIGHT/2 - 100
 
-    sx = top_left_x - 200
-    sy = top_left_y + 200
+    sx = TL_X - 200
+    sy = TL_y + 200
 
     for i in range(len(grid)):
         for j in range(len(grid[i])):
-            pygame.draw.rect(surface, grid[i][j], (top_left_x + j*block_size, top_left_y + i*block_size, block_size, block_size), 0)
+            pygame.draw.rect(surface, grid[i][j], (TL_X + j*BLOCK_SIZE, TL_y + i*BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE), 0)
 
-    pygame.draw.rect(surface, (255, 0, 0), (top_left_x, top_left_y, play_width, play_height), 5)
+    pygame.draw.rect(surface, (255, 0, 0), (TL_X, TL_y, PLAY_WIDTH, PLAY_HEIGHT), 5)
 
 class Piece(object):
     def __init__(self, x, y, shape):
@@ -254,8 +273,7 @@ class Piece(object):
         self.color = shape_colors[shapes.index(shape)]
         self.rotation = 0
 
-
-class Game(object):
+class SingleplayerEnvironment(object):
     def __init__(self, id, seed, game_size, init_screen=True):
         random.seed(seed)
         self._seed = seed
@@ -267,28 +285,27 @@ class Game(object):
         self._game_size = game_size
 
         if init_screen:
-            self._screen = pygame.Surface((800, 800), 32)
+            self._screen = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), 32)
 
-        # Setup game space
+        # Setup game states
         self._clock = pygame.time.Clock()
-        self._alive = True
-        self._next_piece = None
-        self._held_piece = None
-
-        self._target = 1 if id is 0 else 0
-        self._send_lines = []
-        self._junk_lines_queue = []
-
-        self._locked_positions = {}
-        self._grid = create_grid(self._locked_positions)
-
         self._change_piece = False
         self._can_hold = True
+        self._alive = True
 
+        # Setup game space
+        self._locked_positions = {}
+        self._grid = create_grid(self._locked_positions)
         self._current_piece = get_shape()
         self._next_piece = get_shape()
         self._held_piece = None
 
+        # Setup attack states
+        self._target = 1 if id is 0 else 0
+        self._send_lines = []
+        self._junk_lines_queue = []
+
+        # Setup game data
         self._pieces = 0
         self._frame = 0
         self._fall_time = 0
@@ -301,9 +318,6 @@ class Game(object):
     def is_alive(self):
         return self._alive
     
-    def get_data(self):
-        return self._grid, self._next_piece, self._held_piece
-    
     def get_attack_data(self):
         lines = self._send_lines
         self._send_lines = []
@@ -311,11 +325,7 @@ class Game(object):
     
     def set_junk_lines(self, lines):
         if len(lines) > 0:
-            if len(self._junk_lines_queue) < 1:
-                self._junk_lines_queue.append([])
-                self._junk_lines_queue.append([])
-                self._junk_lines_queue.append([])
-            self._junk_lines_queue.append(lines)
+            self._junk_lines_queue.append({'time': 4000, 'lines': lines})
     
     def next_piece(self):
         self._current_piece = self._next_piece
@@ -326,21 +336,26 @@ class Game(object):
     
     def render(self):
         draw_window(self._grid, self._screen)
-        draw_chunk_line_queue(self._junk_lines_queue, self._screen)
+        draw_junk_line_queue(self._junk_lines_queue, self._screen)
         draw_next_shape(self._next_piece, self._screen)
         if self._held_piece:
             draw_held_piece(self._held_piece, self._screen)
         pygame.display.update()
-        # pygame.image.save(self._screen, 'games/{}/{}'.format(self._id, self._frame))
     
     def get_frame(self):
         return pygame.surfarray.array3d(self._screen)
     
     def tick(self):
+        # Update grid and game data
         self._grid = create_grid(self._locked_positions)
-        self._fall_time += self._clock.get_rawtime()
-        self._level_time += self._clock.get_rawtime()
+
+        passed_time = self._clock.get_rawtime()
+        self._fall_time += passed_time
+        self._level_time += passed_time
         self._clock.tick()
+
+        if len(self._junk_lines_queue) > 0:
+            self._junk_lines_queue[0]['time'] -= passed_time
 
         if self._level_time / 1000 > 5:
             self._level_time = 0
@@ -356,6 +371,7 @@ class Game(object):
                 self._current_piece.y -= 1
                 self._change_piece = True
         
+        # Handle actions
         if len(self._action_queue) > 0:
             action = self._action_queue[0]
             # Move left
@@ -401,9 +417,9 @@ class Game(object):
                 self._current_piece.y = 0
                 self._can_hold = False
             self._action_queue.remove(action)
-        shape_pos = convert_shape_format(self._current_piece)
 
         # Add new current piece position to grid
+        shape_pos = convert_shape_format(self._current_piece)
         for i in range(len(shape_pos)):
             x, y = shape_pos[i]
             if y > -1:
@@ -411,38 +427,48 @@ class Game(object):
         
         # Current piece has hit bottom
         if self._change_piece:
-            # Add piece to locked pieces
             for pos in shape_pos:
-                # TODO: Easy fix
-                p = (pos[0], pos[1])
-                self._locked_positions[p] = self._current_piece.color
-            nl, xg = clear_rows(self._grid, self._locked_positions, shape_pos)
-            self._send_lines = [xg] * nl
+                self._locked_positions[pos] = self._current_piece.color
+            cleared, x_gap = clear_rows(self._grid, self._locked_positions, shape_pos)
 
             # Remove from junkline queue
-            for i in range(nl):
-                for j, group in enumerate(self._junk_lines_queue):
-                    for line in group:
-                        self._junk_lines_queue[j].remove(line)
-                        if len (self._junk_lines_queue[j]) < 1:
-                            del self._junk_lines_queue[j]
-                        i += 1
+            junk_lines_removed = 0
+            for i, group in enumerate(self._junk_lines_queue):
+                time = group['time']
+                lines = group['lines']
 
-            # Add junk lines to grid
+                for line in lines:
+                    self._junk_lines_queue[i]['lines'].remove(line)
+                    if len (self._junk_lines_queue[i]['lines']) < 1:
+                        del self._junk_lines_queue[i]
+                    junk_lines_removed += 1
+
+                    if junk_lines_removed > cleared - 1:
+                        break
+                if junk_lines_removed > cleared - 1:
+                    break
+            self._send_lines = [x_gap] * (cleared - junk_lines_removed)
+
+            # Handle junk lines
             if len(self._junk_lines_queue) > 0:
-                new_locked_pos = {}
-                junk_lines = self._junk_lines_queue[0]
-                n_lines = len(junk_lines)
+                time = self._junk_lines_queue[0]['time']
+                lines = self.set_junk_lines[0]['lines']
 
-                for x, y in self._locked_positions.keys():
-                    new_locked_pos[(x, y-n_lines)] = self._locked_positions[(x, y)]
+                if time < 1:
+                    new_locked_pos = {}
+                    n_lines = len(lines)
 
-                for i, line in enumerate(junk_lines):
-                    for x in range(10):
-                        if x is not line:
-                            new_locked_pos[(x, 20-(i + 1))] = (255, 255, 255)
-                self._locked_positions = new_locked_pos
-                self._junk_lines_queue.remove(junk_lines)
+                    # Move all blocks up
+                    for x, y in self._locked_positions.keys():
+                        new_locked_pos[(x, y-n_lines)] = self._locked_positions[(x, y)]
+
+                    # Add junk lines to grid
+                    for i, line in enumerate(lines):
+                        for x in range(10):
+                            if x is not line:
+                                new_locked_pos[(x, 20 - (i + 1))] = (255, 255, 255)
+                    self._locked_positions = new_locked_pos
+                    del self._junk_lines_queue[0]
 
             # Update game states
             self._change_piece = False
@@ -453,50 +479,22 @@ class Game(object):
             self._alive = False
         self._frame += 1
 
-class StandaloneWrapper(Game):
-    def __init__(self, id, seed, game_size, debug=False):
-        super(StandaloneWrapper, self).__init__(id, seed, game_size, init_screen=False)
-        self._screen = pygame.display.set_mode((800, 800))
-        self._debug = debug
-        self._directory = 'debug/game/{}'.format(id)
-
-        if debug:
-            Path(self._directory).mkdir(parents=True, exist_ok=True)
+class MultiplayerEnvironment():
+    def __init__(self, num_games=99):
+        os.environ['SDL_VIDEODRIVER'] = 'dummy'
+        self._games = [SingleplayerEnvironment(n, 3210, num_games) for n in range(num_games)]
     
-    def run(self):
-        frame_n = 0
-        while True:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pygame.display.quit()
-                    break
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_a:
-                        self.step(0)
-                    if event.key == pygame.K_d:
-                        self.step(1)
-                    if event.key == pygame.K_s:
-                        self.step(2)
-                    if event.key == pygame.K_w:
-                        self.step(3)
-                    if event.key == pygame.K_q:
-                        self.step(4)
-                    if event.key == pygame.K_e:
-                        self.step(5)
-                    if event.key == pygame.K_SPACE:
-                        self.step(6)
-            
-            self.render()
-            self.tick()
+    def start(self):
+        pygame.display.set_mode((1,1))
 
-            if not self.is_alive():
-                break
+        run, frame_n = 0, True
+        while len(self._games) > 0 and run:
+            for i, game in enumerate(self._games):
+                if not game.is_alive():
+                    self._games.remove(game)
 
-            if self._debug:
-                im_path = self._directory + '/' + str(frame_n) + '.jpg'
-                pygame.image.save(self._screen, im_path)
+                game.tick()
+                game.render()
+
+                frame = game.get_frame()[::-1]
             frame_n += 1
-
-if __name__ == '__main__':
-    game = StandaloneWrapper(0, random.random(), debug=False)
-    game.run()

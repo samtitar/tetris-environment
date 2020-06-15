@@ -20,7 +20,7 @@ def handle_client(connection, address, client_id):
             attack_data = connection.recv(2048)
 
             if attack_data:
-                print(attack_data)
+                print(pickle.loads(attack_data))
                 attack_data = pickle.loads(attack_data)
                 target = clients[attack_data['target']]
                 target.send(pickle.dumps(attack_data))
@@ -34,7 +34,7 @@ def handle_client(connection, address, client_id):
 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-server_address = ('192.168.1.25', 9009)
+server_address = ('192.168.1.25', 9008)
 print('Starting server on {}:{}'.format(*server_address))
 server.bind(server_address)
 
@@ -47,7 +47,7 @@ while True:
     try:
         clients.append(connection)
 
-        client_id = len(clients)
+        client_id = len(clients) - 1
         thread = Thread(target=handle_client, args=(connection, client_address, client_id))
         thread.start()
 
